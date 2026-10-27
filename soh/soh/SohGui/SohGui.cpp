@@ -44,6 +44,10 @@
 #include "soh/Enhancements/randomizer/Plandomizer.h"
 #include "soh/SohGui/SohModals.h"
 
+// Fishing Deluxe
+void DeluxeFishing_Init();
+std::shared_ptr<Ship::GuiWindow> DeluxeFishing_CreateIndexWindow();
+
 namespace SohGui {
 
 // MARK: - Properties
@@ -188,6 +192,10 @@ void SetupGuiElements() {
 
     mStatsWindow = std::make_shared<SohStatsWindow>(CVAR_WINDOW("SohStats"), "Stats##Soh", ImVec2(400, 100));
     gui->AddGuiWindow(mStatsWindow);
+
+    // Fishing Deluxe
+    DeluxeFishing_Init();
+    gui->AddGuiWindow(DeluxeFishing_CreateIndexWindow());
 
     /*mInputEditorWindow = gui->GetGuiWindow("Controller Configuration");
     if (mInputEditorWindow == nullptr) {
