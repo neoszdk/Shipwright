@@ -128,6 +128,12 @@ typedef enum {
 #define LINE_SEG_COUNT 200
 #define SINKING_LURE_SEG_COUNT 20
 
+// Fishing Deluxe
+void DeluxeFishing_OnFishInit(Actor* actor);
+void DeluxeFishing_BeforeDraw(Actor* actor, PlayState* play);
+const char* DeluxeFishing_OnFishCaught(Actor* actor, f32 lengthCm);
+int DeluxeFishing_ExtraFish(int i, f32* x, f32* y, f32* z, s16* param);
+
 const ActorInit Fishing_InitVars = {
     ACTOR_FISHING,
     ACTORCAT_NPC,
@@ -996,6 +1002,17 @@ void Fishing_Init(Actor* thisx, PlayState* play2) {
             Actor_Spawn(&play->actorCtx, play, ACTOR_FISHING, sFishInits[i].pos.x, sFishInits[i].pos.y,
                         sFishInits[i].pos.z, 0, Rand_ZeroFloat(0x10000), 0, 100 + i);
         }
+
+        // Fishing Deluxe: extra fish living in the swamp cove
+        {
+            f32 extraX, extraY, extraZ;
+            s16 extraParam;
+
+            for (i = 0; DeluxeFishing_ExtraFish(i, &extraX, &extraY, &extraZ, &extraParam); i++) {
+                Actor_Spawn(&play->actorCtx, play, ACTOR_FISHING, extraX, extraY, extraZ, 0, Rand_ZeroFloat(0x10000),
+                            0, extraParam);
+            }
+        }
     } else {
         if (!GameInteractor_Should(VB_FISHING_FISH_IS_LOACH, thisx->params >= (EN_FISH_PARAM + 15)) ||
             (thisx->params == EN_FISH_AQUARIUM)) {
@@ -1022,6 +1039,11 @@ void Fishing_Init(Actor* thisx, PlayState* play2) {
                 GameInteractor_Should(VB_FISHING_FISH_IS_LOACH, sFishInits[thisx->params - EN_FISH_PARAM].isLoach);
             this->perception = sFishInits[thisx->params - EN_FISH_PARAM].perception;
             this->fishLength = sFishInits[thisx->params - EN_FISH_PARAM].baseLength;
+
+            // Fishing Deluxe: fish living in the swamp cove get a deluxe species (loaches stay vanilla)
+            if (this->isLoach == 0) {
+                DeluxeFishing_OnFishInit(thisx);
+            }
 
             this->fishLength += Rand_ZeroFloat(4.99999f);
 
@@ -3896,6 +3918,9 @@ void Fishing_UpdateFish(Actor* thisx, PlayState* play2) {
             }
 
             if (this->timerArray[0] == 90) {
+                // Fishing Deluxe: record the species in the Fish Index
+                DeluxeFishing_OnFishCaught(&this->actor, this->fishLength);
+
                 Audio_QueueSeqCmd(SEQ_PLAYER_BGM_MAIN << 24 | NA_BGM_HEART_GET | 0x900);
                 sFishingCaughtTextDelay = 40;
 
@@ -4300,6 +4325,9 @@ void Fishing_DrawFish(Actor* thisx, PlayState* play) {
     Fishing* this = (Fishing*)thisx;
 
     Gfx_SetupDL_25Opa(play->state.gfxCtx);
+
+    // Fishing Deluxe: species tint
+    DeluxeFishing_BeforeDraw(thisx, play);
 
     Matrix_Translate(this->actor.world.pos.x, this->actor.world.pos.y, this->actor.world.pos.z, MTXMODE_NEW);
     Matrix_RotateY(((this->unk_162 + this->actor.shape.rot.y) / 32768.0f) * M_PI, MTXMODE_APPLY);
