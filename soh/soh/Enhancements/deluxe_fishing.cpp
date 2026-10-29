@@ -34,7 +34,6 @@ extern "C" {
 #include "variables.h"
 }
 
-extern "C" PlayState* gPlayState;
 
 enum class Rarity : uint8_t { Common, Uncommon, Rare, Epic, Legendary };
 
@@ -64,8 +63,8 @@ static std::vector<FishDef> sFish;
 static std::vector<Progress> sProg;
 static std::mt19937 sRng{ std::random_device{}() };
 static bool sEnabled = true;       // player toggle: use swamp pond (on by default)
-static bool sActive = false;       // currently inside the (swamp) fishing pond
 static bool sMissingOnly = false;
+static bool sWholePond = true;    // testing: every fish in the pond is a deluxe fish (untick = swamp cove only)
 static std::string sToast;
 static double sToastUntil = 0.0;
 
@@ -164,7 +163,7 @@ static bool InCove(float x, float z) {
 extern "C" void DeluxeFishing_OnFishInit(Actor* a) {
     EnsureInit();
     a->home.rot.z = 0;
-    if (sEnabled && InCove(a->world.pos.x, a->world.pos.z)) {
+    if (sEnabled && (sWholePond || InCove(a->world.pos.x, a->world.pos.z))) {
         a->home.rot.x = (int16_t)(RollSpecies() + 1);
     } else {
         a->home.rot.x = 0;
@@ -182,10 +181,17 @@ extern "C" void DeluxeFishing_BeforeDraw(Actor* a, PlayState* play) {
     }
 
     const FishDef& f = sFish[a->home.rot.x - 1];
+
+    // Tint 1: primitive/environment color (works if the fish material uses them)
     OPEN_DISPS(play->state.gfxCtx);
     gDPSetPrimColor(POLY_OPA_DISP++, 0, 0, f.r, f.g, f.b, 255);
     gDPSetEnvColor(POLY_OPA_DISP++, f.r, f.g, f.b, 255);
     CLOSE_DISPS(play->state.gfxCtx);
+
+    // Tint 2: the fish model is lit, so light it with the species color (ambient only, no directional lights)
+    auto lift = [](uint8_t c) { return (uint8_t)(70 + (c * 185) / 255); };
+    Lights* lights = Lights_New(play->state.gfxCtx, lift(f.r), lift(f.g), lift(f.b));
+    Lights_Draw(lights, play->state.gfxCtx);
 }
 
 // Call when a fish is landed. Records the species in the index. Returns its name (or NULL for vanilla fish).
@@ -236,19 +242,6 @@ extern "C" int DeluxeFishing_ExtraFish(int i, float* x, float* y, float* z, int1
 
 void DeluxeFishing_Init() {
     EnsureInit();
-    if (GameInteractor::Instance == nullptr) return;
-
-    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnSceneInit>([](int16_t sceneNum) {
-        // SCENE_FISHING_POND is called SCENE_TURIBORI on older branches
-        sActive = sEnabled && sceneNum == SCENE_FISHING_POND;
-    });
-
-    // Murkier water view while the deluxe pond is on. The value is an offset added to the scene's fog; tweak to taste.
-    GameInteractor::Instance->RegisterGameHook<GameInteractor::OnGameFrameUpdate>([]() {
-        if (!sActive || gPlayState == nullptr) return;
-        EnvironmentContext& env = gPlayState->envCtx;
-        env.adjFogNear = -150;
-    });
 }
 
 static void DrawToast() {
@@ -269,9 +262,11 @@ static void DrawIndexContents() {
 
     ImGui::Text("Caught: %d / %d    Missing: %d", caught, total, total - caught);
     ImGui::ProgressBar((float)caught / total, ImVec2(-1, 0));
-    ImGui::Checkbox("Deluxe Swamp Pond", &sEnabled);
+    ImGui::Checkbox("Deluxe fish on", &sEnabled);
     ImGui::SameLine();
+    ImGui::Checkbox("Whole pond (untick = swamp cove only)", &sWholePond);
     ImGui::Checkbox("Show missing only", &sMissingOnly);
+    ImGui::TextDisabled("Leave and re-enter the pond after changing the first two.");
 
     if (ImGui::BeginTable("fishtable", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY | ImGuiTableFlags_Borders)) {
         ImGui::TableSetupScrollFreeze(0, 1);
